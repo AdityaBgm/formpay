@@ -7,7 +7,7 @@ const createPayment = async (req, res) => {
     const { orderId, orderAmount, customerName, customerEmail, customerPhone } = req.body;
 
     try {
-        const response = await axios.post('https://sandbox.cashfree.com/pg/orders', {
+       const response = await axios.post('https://api.cashfree.com/pg/orders', {
             order_id: orderId,
             order_amount: orderAmount,
             order_currency: "INR",

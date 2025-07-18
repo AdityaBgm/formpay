@@ -37,6 +37,7 @@ const userRoutes = require('./routes/userRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 
 dotenv.config();
+
 const app = express();
 app.use(express.json());
 app.use(cors());
