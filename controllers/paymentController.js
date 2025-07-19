@@ -24,7 +24,8 @@ const createOrder = async (req, res) => {
       customer_details: { customer_id: phone, customer_name: name, customer_email: email, customer_phone: phone },
       order_meta: {
         return_url: `${process.env.FRONTEND_URL}/payment-status?order_id=${orderId}`,
-         payment_methods: "cc,dc,nb,upi,ppc,emi,paylater,app"
+         payment_methods: "cc,dc,nb,upi,ppc,emi,paylater,app",
+         upi_intent: true
       }
     }, {
       headers: {
