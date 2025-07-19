@@ -19,11 +19,12 @@ const createOrder = async (req, res) => {
     // Create order in Cashfree
     const response = await axios.post(`${process.env.CASHFREE_API_URL}/orders`, {
       order_id: orderId,
-      order_amount: 5,
+      order_amount: 3,
       order_currency: 'INR',
       customer_details: { customer_id: phone, customer_name: name, customer_email: email, customer_phone: phone },
       order_meta: {
-        return_url: `${process.env.FRONTEND_URL}/payment-status?order_id=${orderId}`
+        return_url: `${process.env.FRONTEND_URL}/payment-status?order_id=${orderId}`,
+        payment_methods: "cc,dc,nb,upi,wallet"
       }
     }, {
       headers: {
