@@ -1,76 +1,69 @@
 const axios = require('axios');
-const crypto = require('crypto');
-const User = require('../models/User');
+const Order = require('../models/Order');
 
-// ✅ Create Payment Function
-const createPayment = async (req, res) => {
-    const { orderId, orderAmount, customerName, customerEmail, customerPhone } = req.body;
+const createOrder = async (req, res) => {
+  const { name, email, phone } = req.body;
+  const orderId = `order_${Date.now()}`;
 
-    try {
-       const response = await axios.post('https://api.cashfree.com/pg/orders', {
-            order_id: orderId,
-            order_amount: orderAmount,
-            order_currency: "INR",
-            customer_details: {
-                customer_id: orderId,
-                customer_name: customerName,
-                customer_email: customerEmail,
-                customer_phone: customerPhone
-            }
-        }, {
-            headers: {
-                'Content-Type': 'application/json',
-                'x-client-id': process.env.CASHFREE_APP_ID,
-                'x-client-secret': process.env.CASHFREE_SECRET_KEY,
-                'x-api-version': '2022-09-01'
-            }
-        });
+  try {
+    // Save order in MongoDB
+    await Order.create({
+      order_id: orderId,
+      name,
+      email,
+      phone,
+      amount: 5,
+      payment_status: 'PENDING'
+    });
 
-        // 🔥 Save orderId to user
-        await User.findOneAndUpdate({ email: customerEmail }, { orderId });
+    // Create order in Cashfree
+    const response = await axios.post(`${process.env.CASHFREE_API_URL}/orders`, {
+      order_id: orderId,
+      order_amount: 5,
+      order_currency: 'INR',
+      customer_details: { customer_id: phone, customer_name: name, customer_email: email, customer_phone: phone },
+      order_meta: {
+        return_url: `${process.env.FRONTEND_URL}/payment-status?order_id=${orderId}`
+      }
+    }, {
+      headers: {
+        'x-client-id': process.env.CASHFREE_APP_ID,
+        'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+        'x-api-version': '2022-09-01',
+        'Content-Type': 'application/json'
+      }
+    });
 
-        res.status(200).json(response.data);
-    } catch (err) {
-        console.error(err.response?.data || err.message);
-        res.status(500).json({ message: 'Payment creation failed', error: err.response?.data || err.message });
-    }
+    res.json({ payment_session_id: response.data.payment_session_id });
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res.status(500).json({ error: 'Failed to create order' });
+  }
 };
 
-// ✅ Cashfree Webhook Function
-const cashfreeWebhook = async (req, res) => {
-    const signature = req.headers['x-webhook-signature'];
-    const secret = process.env.CASHFREE_SECRET_KEY;
-    const payload = req.body;
+const verifyPayment = async (req, res) => {
+  const { orderId } = req.params;
+  try {
+    const response = await axios.get(`${process.env.CASHFREE_API_URL}/orders/${orderId}`, {
+      headers: {
+        'x-client-id': process.env.CASHFREE_APP_ID,
+        'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+        'x-api-version': '2022-09-01'
+      }
+    });
 
-    const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(JSON.stringify(payload))
-        .digest('base64');
+    const status = response.data.order_status;
 
-    // if (signature !== expectedSignature) {
-    //     console.error('Webhook signature mismatch!');
-    //     return res.status(400).json({ message: 'Invalid signature' });
-    // }
+    await Order.findOneAndUpdate(
+      { order_id: orderId },
+      { payment_status: status, updated_at: new Date() }
+    );
 
-    const { order_id, order_status } = payload;
-
-    try {
-        const user = await User.findOne({ orderId: order_id });
-        if (!user) {
-            console.error(`User with orderId ${order_id} not found`);
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        user.paymentStatus = order_status === 'PAID' ? 'SUCCESS' : 'FAILED';
-        await user.save();
-
-        console.log(`Payment status updated for ${order_id}: ${user.paymentStatus}`);
-        res.status(200).json({ message: 'Webhook processed' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server Error' });
-    }
+    res.json({ status });
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res.status(500).json({ error: 'Failed to verify payment' });
+  }
 };
 
-// ✅ Export both functions
-module.exports = { createPayment, cashfreeWebhook };
+module.exports = { createOrder, verifyPayment };
